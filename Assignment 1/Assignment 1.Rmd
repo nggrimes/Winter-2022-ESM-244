@@ -1,0 +1,114 @@
+---
+title: "Assignment 1"
+author: "Nathan Grimes"
+date: "1/12/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,cache=TRUE,warning = FALSE)
+
+library(tidyverse)
+library(lubridate)
+library(patchwork)
+library(AICcmodavg)
+library(caret)
+```
+
+## Task 1 Data Summary
+
+We are tasked to present amphibian abundance data from the Sierra Lakes Inventory Project.
+
+
+
+```{r dataimport}
+amphibian_raw<-readxl::read_excel("sierra_amphibians.xlsx")
+```
+
+```{r tidytask}
+ylfrog<-amphibian_raw %>% 
+  filter(amphibian_life_stage!="EggMass" & amphibian_species=="RAMU") %>% 
+  mutate(survey_date=as.Date(survey_date)) %>% 
+  mutate(year=year(survey_date)) %>% 
+  group_by(year,amphibian_life_stage) %>% 
+  summarize(total=sum(amphibian_number,na.rm = TRUE))
+
+p1<-ggplot(data=ylfrog,aes(x=amphibian_life_stage,y=total))+
+  geom_col(aes(fill=as.factor(year)),position="dodge")+
+  scale_fill_viridis_d(name="Year")+
+  xlab("Life Stage")+
+  ylab("Observed Count")+
+  theme_classic()
+
+```
+
+
+
+
+```{r tidyadjust}
+ylfrogt2<-amphibian_raw %>% 
+    filter(amphibian_life_stage %in% c("Adult","SubAdult") & amphibian_species=="RAMU") %>% 
+  group_by(lake_id) %>% 
+  summarize(total=sum(amphibian_number,na.rm=TRUE)) %>% 
+  arrange(desc(total)) %>% 
+  head(n=5) %>% 
+  mutate(lake_id=sub("^","Lake ",lake_id))
+
+p2<-ggplot(ylfrogt2,aes(x=fct_reorder(lake_id,total),y=total,fill=factor(lake_id)))+
+  geom_col()+
+  scale_fill_viridis_d()+
+  theme_classic()+
+  xlab("")+
+  ylab("Observed Count")+
+  theme(legend.position = "none")
+```
+
+```{r plotcombine}
+p1/p2
+```
+
+## Task 2 Model Selection
+
+```{r seawater_data}
+
+seawater_raw<-read.csv("calcofi_seawater_samples.csv",sep=",")
+
+#Create the models
+
+model1<-lm(o2sat~t_deg_c+salinity+po4u_m,data=seawater_raw)
+model2<-lm(o2sat~t_deg_c+salinity+po4u_m+depth_m,data=seawater_raw)
+
+#Combine into list and provide names to make the combined AIC tab function work smoother
+
+models<-list(model1,model2)
+mod.names<-c("depth","no.depth")
+aictab(cand.set=models,modnames=mod.names)
+```
+Select the models based on AIC performance. The no depth linear model performed significantly better based on the $\Delta AIC$ greater than 2. 
+
+```{r CV}
+set.seed(123) #Don't want the computer to shift the random breaks everytime we knit
+
+#Use built in functions to create the training section partitions
+train.control<-trainControl(method="repeatedcv",number=10,repeats = 3)
+
+
+#Train the model with the training sets
+CVmodel1<-train(o2sat~t_deg_c+salinity+po4u_m,data=seawater_raw,method="lm",trControl=train.control)
+
+
+#Check Results
+results_CV1<-CVmodel1$results$RMSE
+
+#Repeat for the second model on the same training data
+
+CVmodel2<-train(o2sat~t_deg_c+salinity+po4u_m+depth_m,data=seawater_raw,method="lm",trControl=train.control)
+
+
+results_CV2<-CVmodel2$results$RMSE
+
+# Choose a model in this case model 1 performs slightly better and test on the whole dataset
+
+final_model<-lm(o2sat~t_deg_c+salinity+po4u_m,data=seawater_raw)
+```
+
