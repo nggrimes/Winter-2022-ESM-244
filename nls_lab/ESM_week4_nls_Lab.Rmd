@@ -18,6 +18,7 @@ library(cowplot)
 
 ## Introduction
 
+To demonstrate the power of non linear least squares in R we're going to recreate a fisheries paper that examined whether productivity in fisheries was driven more by abundance, regime shifts, or simply random noise. [Here is a link to the paper if curious about detailied methods and results](https://www.pnas.org/content/110/5/1779). In their research, they used maximum likelihood estimation rather than non-linear least squares, but we will see similar results. In fact, the model choices for nls and mle are nearly identical in selected coefficients! Also to simplify the lab, we will only recreate the abundance and random models.
 
 ## Data Wrangling
 
@@ -28,11 +29,11 @@ All data comes from the RAM Legacy Database, normally we would go through the wh
 ```{r}
 timeseries_values_views<-read.csv("timeseries_values_views",sep = ",")
 
-load("~/Winter 2022/Winter-2022-ESM-244/stock_ids.Rdata")
+load("~/Winter 2022/Winter-2022-ESM-244/nls_lab/stock_ids.Rdata")
 ```
 
 
-This table is massive, so lets clean it up. For our analsysi we are only interested in the stock name, year, biomass, and catch. Select those columns and remove any observations with *NA*. Let's filter out stocks with less than 20 years of data to ensure we have enough observations for the nls models to converge. I'm going to add one more step and manually remove a few stocks that I know are undesirable. Mainly they collapse, have incorrect units or are redundant for this lab.
+This table is massive, so lets clean it up. For our analysis we are only interested in the stock name, year, biomass, and catch. Select those columns and remove any observations with `N`. Let's filter out stocks with less than 20 years of data to ensure we have enough observations for the nls models to converge. I'm going to add one more step and manually remove a few stocks that I know are undesirable. Mainly they collapse, have incorrect units or are redundant for this lab.
 
 ```{r}
 stock_id_clean<-timeseries_values_views %>% 
@@ -55,13 +56,13 @@ Fish_data<-timeseries_values_views %>%
 
 ## Single model NLS
 
-Surplus is the excess amount of biomass that was added or taken from the underlying stock. It can be modelled using as a simple addition.
+Surplus is the excess amount of biomass that was added or taken from the underlying stock. It can be modeled as a simple addition. Surplus also allows us to generally model recruitment, growth, and natural mortality that is often difficult data to collect. Stock assessements, that RAM is built on, allows us to easily back out suprlus.
 
 \begin{equation}
 S_t=B_{t+1}-B_t+C_t
 \end{equation}
 
-We will need to add a column in our dataset calculating surplus in any given year. Since we have a variable from the future we can use the *ahead()* function. Make sure to drop the *NA* created by the ahead function.
+We will need to add a column in our dataset calculating surplus in any given year. Since we have a variable from the future we can use the `ahead()` function. Make sure to drop the `NA` created by the ahead function.
 
 ```{r}
 surplus<-Fish_data %>% 
@@ -73,7 +74,7 @@ surplus<-Fish_data %>%
 ```
 
 
-Let's see what our data now looks like.
+Let's see what our data looks like with an example of one stock.
 
 ```{r}
 one_stock<-surplus %>% 
@@ -87,11 +88,15 @@ ggplot(data=one_stock,aes(x=year,y=surplus))+
 
 ### Create a Fox Model
 
+There are three primary surplus-production models in the fishery world. The most common is the Gordon-Schaefer model. Vert-pre etal., use a Fox-Model that typically provides a more conservative estimate of maximum sustainable yield. The last model is the Pella-Tomslison model that really is just a more flexible model of the other too using a shape parameter $\phi$ to control the curve. All are built on a logistic growth curve. Given a level of biomass we will be able to predict what the surplus ought to be if we know (or will determine) the maximum sustainable yield and the carrying capacity. Maximum sustainable yield simply refers to the amount of biomass that facilitates the greatest level of harvest possible without depleting the stock. Carrying capacity is the upper bound on the total population size and represents natural environmental pressure limiting stock growth. The paper uses a simplified Fox model that we try to find parameters for to fit the fishery data.  
+
 \begin{equation}
 \hat{S_t}=-e*MSY(\frac{B_t}{K})\ln(\frac{B_t}{K})
 \end{equation}
 
-where e is base of the natural log $\approx$ 2.718, MSY is the maximum sustainable yield, K is the carrying capacity, and $B_t$ is the biomass for the observed year.
+Where e is base of the natural log $\approx$ 2.718, MSY is the maximum sustainable yield, K is the carrying capacity, and $B_t$ is the biomass for the observed year.
+
+Let's create a function in R.
 
 ```{r foxmodel}
 fox<-function(m,carry,biomass){
@@ -100,9 +105,11 @@ return(out)
 }
 ```
 
+Now we can construct our nonlinear least squares with sufficient guesses. But what should our guesses be? Well carrying capacity is straightforward. Traditionally, its estimated as the highest observed biomass so we can just the max of the biomass data. Maximum sustainable yield can be found through analytical analysis. It's been done many times over so I'll just tell you it's estimated at 37% of the carrying capacity.
 
 ```{r nlsonemodel}
 
+#Write out the guess first, we'll move into the nls wrapper soon
 
 guess_vec=c(max(one_stock$TBbest)*0.37,max(one_stock$TBbest))
 
@@ -111,7 +118,11 @@ one_stock_nls=nls(surplus~fox(m,carry,TBbest),
                   start=list(m=guess_vec[1],carry=guess_vec[2]),trace=TRUE )
 ```
 
+Great our model works on a single model! Now we need to find a way to replicate the analysis. Ideally without using for loops as those can be a pain to account for. 
+
 ### Using purrr to run many nls models
+
+Purrr is a package in r that has been designed to use the functionality of lapply family of equations for the tidyverse. So now we can use pipes to pass along the application of functions and models to dataframes, specific groups in a dataframe, or specific indicies of a dataframe. There is some new syntax that we will use, but hopefully it will be clear and you'll the power of purrr in future applications.
 
 ```{r nlsmany}
 #Define a new function to pass along the nls calls
@@ -134,6 +145,8 @@ fox_all<-surplus %>%
 
 ## Compare to a random null model
 
+In the paper they derive a null model to test the different models against. The best way to test if any of these models are better is if they can out perform just a random collection of data. They propose if we just use the average surplus from the time period and our models can't outpeform that, then the stock is under more influence of sheer randomness then any explicable measures. We can jump straight into the purrr analsysis.
+
 ```{r}
 
 # Define the model, don't worry to much how I got it what it means
@@ -152,7 +165,18 @@ r_mse<-surplus %>%
   mutate(RMSE=map_dbl(data,~r_avg(.x$surplus)))
 ```
 
+## How did the models compare to the null?
+
+```{r}
+which(r_mse$RMSE-fox_all$RMSE<0)
+
+fox_all$stockid[39]
+```
+In the paper, about 12% of the stocks were more explained by random shocks and 16% more so by abundance models. The rest were lead by regime shifts that we did not model. Our results only found one stock out of 44 was better explained by random growth. Either our choice of nls models is far better than their mle method (not likely), or the subset I choose lends itself more to abundance models (this is really what happened). I did not want to overwhelm the analysis with over 200 stocks. 
+
 ## Graph the top 5 best fit models
+
+Purrr combined with cowplot creates a streamlined way to build multiple graphs. Let's take the 5 best fit fox models and show how they performed compared to the data. 
 
 ```{r}
 plots<-fox_all %>% 
