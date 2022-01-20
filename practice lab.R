@@ -1,6 +1,8 @@
 library(MuMIn)
 library(purrr)
 
+
+# Have to manually load RAM database
 cod<-taxonomy %>% 
    filter(family=="Gadidae")
 sole<-taxonomy %>% 
@@ -89,6 +91,19 @@ return(AICc)
 r_surplus(one_stock$surplus,one_stock$TBbest)
 
 
+r_avg<-function(surplus){
+  avg_sur=mean(surplus)
+  
+  rmse=sqrt(mean((avg_sur-surplus)^2))
+  
+  return(rmse)
+}
+
+r_mse<-surplus %>%
+  group_by(stockid) %>% 
+  nest() %>% 
+  mutate(RMSE=map_dbl(data,~r_avg(.x$surplus)))
+
 ## this works to get the AICc
 r_all<-surplus %>%
   group_by(stockid) %>% 
@@ -102,26 +117,55 @@ r_all<-surplus %>%
 
 
 ### Likelihood stuff because it worked
-liklihood<-function(m,carry,sigma){
+liklihood<-function(x,surplus,biomass){
 
+  m=x[1]
+  carry=x[2]
+  sigma=x[3]
   
-  like=log(1/(sigma*sqrt(2*pi)))-(surplus-fox(m=m,carry=carry,biomass = biomass))^2/2*sigma^2
+  like=log(1/(sigma*sqrt(2*pi)))-(surplus-fox(m=m,carry=carry,biomass = biomass))^2/(2*sigma^2)
   
   
   
   out=-sum(like)
   
-  
   return(out)
 }
 
-test=optim(par = c(321160,868000,1000),fn=liklihood,surplus=one_stock$surplus,biomass=one_stock$TBbest)
+
+test=optim(par = c(321160,868000,sd(one_stock$surplus)),fn=liklihood,surplus=one_stock$surplus,biomass=one_stock$TBbest)
 
 optim_fcn<-function(data){
-  hold=optim(par=c(max(data$TBbest)*0.37,max(data$TBbest),10),fn=liklihood,surplus=data$surplus,biomass=data$surplus)
+  hold=optim(par=c(max(data$TBbest)*0.37,max(data$TBbest),sd(data$surplus)),fn=liklihood,surplus=data$surplus,biomass=data$TBbest)
   
-  optim_fcn$par
+  #out=hold$value+6+2*3*4/(length(data$TBbest)-3-1)
+  
+  
+  return(hold$par)
 }
 
 
+
+fox_mle<-surplus %>%
+  group_by(stockid) %>% 
+  nest() %>% 
+  mutate(AICc=map(data,~optim_fcn(.x))) 
+
+
+
 fit<-bbmle::mle2(liklihood,start=list(m=209637,carry=1087270,sigma=0.03),data=list(surplus=one_stock$surplus,biomass=one_stock$TBbest))
+
+
+test_fox<-function(x,surplus,biomass){
+  m=x[1]
+  carry=x[2]
+  sigma=x[3]
+  
+  
+  likeli=1/sigma*sqrt(2*pi)*exp(-(surplus-fox(m,carry,biomass))^2/(2*sigma^2))
+  
+  return(likeli)
+}
+test_fox(c(255000,1089722,0.03),one_model$surplus,one_model$TBbest)
+
+fox_all$nls_model[[1]]
