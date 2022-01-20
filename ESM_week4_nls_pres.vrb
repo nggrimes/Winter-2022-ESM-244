@@ -1,0 +1,32 @@
+\frametitle{Adding confidence intervals is easy}
+\protect\hypertarget{adding-confidence-intervals-is-easy}{}
+\small
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{conf}\OtherTok{\textless{}{-}}\FunctionTok{as\_tibble}\NormalTok{(}\FunctionTok{predFit}\NormalTok{(b\_gompertz,}
+            \AttributeTok{newdata =} \FunctionTok{list}\NormalTok{(}\AttributeTok{animal\_age=}\NormalTok{age\_series),}
+            \AttributeTok{interval=}\StringTok{"confidence"}\NormalTok{),}
+            \AttributeTok{level=}\FloatTok{0.95}\NormalTok{) }
+
+\FunctionTok{head}\NormalTok{(conf,}\AttributeTok{n=}\DecValTok{4}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## # A tibble: 4 x 3
+##     fit   lwr   upr
+##   <dbl> <dbl> <dbl>
+## 1  295.  291.  300.
+## 2  322.  318.  327.
+## 3  349.  345.  353.
+## 4  376.  372.  380.
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#plot+geom\_ribbon(data=conf...)}
+\end{Highlighting}
+\end{Shaded}
+
+Model fits so well, the confidence intervals don't even show on plot.

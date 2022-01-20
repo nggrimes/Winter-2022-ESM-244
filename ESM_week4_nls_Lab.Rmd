@@ -1,0 +1,176 @@
+---
+title: "ESM 244 NLS Lab"
+author: "Nathaniel Grimes, Casey O'Hara, Allison Horst"
+date: "1/19/2022"
+output: html_document
+---
+
+```{r setup, include=TRUE, message= FALSE, warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message=FALSE,warning = FALSE)
+library(purrr)
+library(tidyverse)
+library(MuMIn)
+library(Metrics)
+library(cowplot)
+
+
+```
+
+## Introduction
+
+
+## Data Wrangling
+
+### Ram Legacy Database
+
+All data comes from the RAM Legacy Database, normally we would go through the whole database, but instead I have extracted out the main table containing all the values of stock parameters and a list of stocks within the cod and sole families to examine.
+
+```{r}
+timeseries_values_views<-read.csv("timeseries_values_views",sep = ",")
+
+load("~/Winter 2022/Winter-2022-ESM-244/stock_ids.Rdata")
+```
+
+
+This table is massive, so lets clean it up. For our analsysi we are only interested in the stock name, year, biomass, and catch. Select those columns and remove any observations with *NA*. Let's filter out stocks with less than 20 years of data to ensure we have enough observations for the nls models to converge. I'm going to add one more step and manually remove a few stocks that I know are undesirable. Mainly they collapse, have incorrect units or are redundant for this lab.
+
+```{r}
+stock_id_clean<-timeseries_values_views %>% 
+  filter(stockid %in% stock_ids$stockid) %>%
+  select(stockid,year,TBbest,TCbest) %>% 
+  drop_na() %>% 
+  group_by(stockid) %>% 
+  summarise(diff=max(year)-min(year)) %>% 
+  filter(diff>20)
+
+remove_vec=c(1,6,9,12,19,21,22,28,42,51,52,55)  # specific known stocks I want to remove
+
+named_remove<-unique(stock_id_clean$stockid)[-remove_vec]  # Get a list of those names for filtering out
+
+Fish_data<-timeseries_values_views %>% 
+  filter(stockid %in% stock_id_clean$stockid) %>% 
+  filter(stockid %in% named_remove)
+```
+
+
+## Single model NLS
+
+Surplus is the excess amount of biomass that was added or taken from the underlying stock. It can be modelled using as a simple addition.
+
+\begin{equation}
+S_t=B_{t+1}-B_t+C_t
+\end{equation}
+
+We will need to add a column in our dataset calculating surplus in any given year. Since we have a variable from the future we can use the *ahead()* function. Make sure to drop the *NA* created by the ahead function.
+
+```{r}
+surplus<-Fish_data %>% 
+  group_by(stockid) %>% 
+  mutate(f_biomass=lead(TBbest)) %>% 
+  mutate(surplus=f_biomass-TBbest+TCbest) %>% 
+  select(stockid,year,surplus,TBbest,TCbest) %>% 
+  drop_na()
+```
+
+
+Let's see what our data now looks like.
+
+```{r}
+one_stock<-surplus %>% 
+  filter(stockid=="COD1f-XIV")
+
+ggplot(data=one_stock,aes(x=year,y=surplus))+
+  geom_point(size=3,color="black")+
+  theme_minimal()
+
+```
+
+### Create a Fox Model
+
+\begin{equation}
+\hat{S_t}=-e*MSY(\frac{B_t}{K})\ln(\frac{B_t}{K})
+\end{equation}
+
+where e is base of the natural log $\approx$ 2.718, MSY is the maximum sustainable yield, K is the carrying capacity, and $B_t$ is the biomass for the observed year.
+
+```{r foxmodel}
+fox<-function(m,carry,biomass){
+ out= -2.718*m*(biomass/carry)*log(biomass/carry)
+return(out)
+}
+```
+
+
+```{r nlsonemodel}
+
+
+guess_vec=c(max(one_stock$TBbest)*0.37,max(one_stock$TBbest))
+
+one_stock_nls=nls(surplus~fox(m,carry,TBbest),
+                  data=one_stock,
+                  start=list(m=guess_vec[1],carry=guess_vec[2]),trace=TRUE )
+```
+
+### Using purrr to run many nls models
+
+```{r nlsmany}
+#Define a new function to pass along the nls calls
+
+all_nls_fcn<-function(surplus_df){
+  nls(surplus~fox(m,carry,TBbest),
+  data=surplus_df,
+  start=list(m=max(surplus_df$TBbest)*0.37,carry=max(surplus_df$TBbest)))
+}
+
+
+fox_all<-surplus %>%
+  group_by(stockid) %>% 
+  nest() %>% 
+  mutate(nls_model=map(data,~all_nls_fcn(.x))) %>% 
+  mutate(predictions=map2(nls_model,data,~predict(.x,newdata=.y))) %>% 
+  mutate(RMSE=map2_dbl(predictions,data,~rmse(.x,.y$surplus)))
+
+```
+
+## Compare to a random null model
+
+```{r}
+
+# Define the model, don't worry to much how I got it what it means
+r_avg<-function(surplus){
+  avg_sur=mean(surplus)
+  
+  rmse=sqrt(mean((avg_sur-surplus)^2))
+  
+  return(rmse)
+}
+
+
+r_mse<-surplus %>%
+  group_by(stockid) %>% 
+  nest() %>% 
+  mutate(RMSE=map_dbl(data,~r_avg(.x$surplus)))
+```
+
+## Graph the top 5 best fit models
+
+```{r}
+plots<-fox_all %>% 
+  arrange(desc(RMSE)) %>% 
+  head(5) %>% 
+  mutate(graph=map2(data,predictions,~ggplot()+geom_point(data = .x,aes(x=.x$year,y=.x$surplus,color='Actual'))+geom_point(aes(x=.x$year,y=.y,color='Predicted'))+theme_minimal()+xlab('Year')+ylab('Surplus')+scale_color_manual(name="Legend",breaks = c('Actual','Predicted'),values=c('Actual'='black','Predicted'='red'))))
+
+legend<-get_legend(plots$graph[[1]])
+
+for(i in 1:length(plots$graph)){
+  plots$graph[[i]]<-plots$graph[[i]]+theme(legend.position = "none")
+}
+
+plot_list=plots$graph
+
+plot_list[[6]]<-legend
+
+cowplot::plot_grid(plotlist=plot_list,labels =c( plots$stockid,""),hjust=-0.5)
+```
+
+
