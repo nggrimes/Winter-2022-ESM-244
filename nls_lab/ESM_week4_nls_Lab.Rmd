@@ -9,7 +9,6 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE,message=FALSE,warning = FALSE)
 library(purrr)
 library(tidyverse)
-library(MuMIn)
 library(Metrics)
 library(cowplot)
 
@@ -36,6 +35,8 @@ load("~/Winter 2022/Winter-2022-ESM-244/nls_lab/stock_ids.Rdata")
 This table is massive, so lets clean it up. For our analysis we are only interested in the stock name, year, biomass, and catch. Select those columns and remove any observations with `N`. Let's filter out stocks with less than 20 years of data to ensure we have enough observations for the nls models to converge. I'm going to add one more step and manually remove a few stocks that I know are undesirable. Mainly they collapse, have incorrect units or are redundant for this lab.
 
 ```{r}
+
+## Remove stocks with less than 20 years of data
 stock_id_clean<-timeseries_values_views %>% 
   filter(stockid %in% stock_ids$stockid) %>%
   select(stockid,year,TBbest,TCbest) %>% 
@@ -51,6 +52,7 @@ named_remove<-unique(stock_id_clean$stockid)[-remove_vec]  # Get a list of those
 Fish_data<-timeseries_values_views %>% 
   filter(stockid %in% stock_id_clean$stockid) %>% 
   filter(stockid %in% named_remove)
+  
 ```
 
 
@@ -62,15 +64,18 @@ Surplus is the excess amount of biomass that was added or taken from the underly
 S_t=B_{t+1}-B_t+C_t
 \end{equation}
 
-We will need to add a column in our dataset calculating surplus in any given year. Since we have a variable from the future we can use the `ahead()` function. Make sure to drop the `NA` created by the ahead function.
+We will need to add a column in our dataset calculating surplus in any given year. Since we have a variable from the future we can use the `lead()` function. Make sure to drop the `NA` created by the ahead function.
 
 ```{r}
 surplus<-Fish_data %>% 
   group_by(stockid) %>% 
+  select(stockid,year,TBbest,TCbest) %>% 
+  drop_na() %>% 
   mutate(f_biomass=lead(TBbest)) %>% 
   mutate(surplus=f_biomass-TBbest+TCbest) %>% 
-  select(stockid,year,surplus,TBbest,TCbest) %>% 
   drop_na()
+  
+  
 ```
 
 
@@ -122,7 +127,7 @@ Great our model works on a single model! Now we need to find a way to replicate 
 
 ### Using purrr to run many nls models
 
-Purrr is a package in r that has been designed to use the functionality of lapply family of equations for the tidyverse. So now we can use pipes to pass along the application of functions and models to dataframes, specific groups in a dataframe, or specific indicies of a dataframe. There is some new syntax that we will use, but hopefully it will be clear and you'll the power of purrr in future applications.
+Purrr is a package in r that has been designed to use the functionality of lapply family of equations for the tidyverse. So now we can use pipes to pass along the application of functions and models to dataframes, specific lists in a dataframe, or specific indicies of a dataframe. There is some new syntax that we will use, but hopefully it will be clear and you'll the power of purrr in future applications.
 
 ```{r nlsmany}
 #Define a new function to pass along the nls calls
@@ -132,6 +137,8 @@ all_nls_fcn<-function(surplus_df){
   data=surplus_df,
   start=list(m=max(surplus_df$TBbest)*0.37,carry=max(surplus_df$TBbest)))
 }
+
+## Pay attention to the position and use of .x, .y, and .f in the map functions
 
 
 fox_all<-surplus %>%
@@ -145,7 +152,7 @@ fox_all<-surplus %>%
 
 ## Compare to a random null model
 
-In the paper they derive a null model to test the different models against. The best way to test if any of these models are better is if they can out perform just a random collection of data. They propose if we just use the average surplus from the time period and our models can't outpeform that, then the stock is under more influence of sheer randomness then any explicable measures. We can jump straight into the purrr analsysis.
+In the paper they derive a null model to test the different models against. The best way to test if any of these models are better is if they can out perform just a random collection of data. They propose if we just use the average surplus from the time period and our models can't outpeform that, then the stock is under more influence of sheer randomness then any explicable measures. We can jump straight into the purrr analysis.
 
 ```{r}
 
@@ -180,7 +187,7 @@ Purrr combined with cowplot creates a streamlined way to build multiple graphs. 
 
 ```{r}
 plots<-fox_all %>% 
-  arrange(desc(RMSE)) %>% 
+  arrange(RMSE) %>% 
   head(5) %>% 
   mutate(graph=map2(data,predictions,~ggplot()+geom_point(data = .x,aes(x=.x$year,y=.x$surplus,color='Actual'))+geom_point(aes(x=.x$year,y=.y,color='Predicted'))+theme_minimal()+xlab('Year')+ylab('Surplus')+scale_color_manual(name="Legend",breaks = c('Actual','Predicted'),values=c('Actual'='black','Predicted'='red'))))
 
