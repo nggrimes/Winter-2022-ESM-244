@@ -1,0 +1,173 @@
+---
+title: "Assignment 2 Task 2 Answer Key"
+author: "Nathan Grimes"
+date: "1/24/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,warning=FALSE,message=FALSE,eval=FALSE)
+
+library(tidyverse)
+library(cowplot)
+library(Metrics)
+```
+
+## Task 2: Parameter Estimation with Purrr - Lizards Length to Weight
+
+Source: Lightfoot, D. and W.G. Whitford. 2020. Lizard pitfall trap data from 11 NPP study locations at the Jornada Basin LTER site, 1989-2006 ver 37. Environmental Data Initiative. https://doi.org/10.6073/pasta/4a6e258fb49c31e222ecbbcfd128967f
+
+For task 2, you will use non linear least squares to estimate parameters of a length to weight model for lizard populations in New Mexico. 
+
+
+Create a knitted.html saved as `a2_task2_lastname_firstname.html` which provides a description of the dataset, the purpose of the analysis, a citation of the dataset, and answers the following questions.
+
+###
+
+1) Create a dataframe of only the sex, species, snout to vent length, and weight. Exclude juveniles from the analysis. Remove any species that possess less than 6 observations. Finally, make sure you "balance" the data between male and female observations (e.g. make sure all species that are selected have observations of both male and female). Show the list of the species that will be used in the rest of the task (can just print out, no need for a table)
+
+Fit a snout length to weight model of the following form to all lizard in your clean dataframe.
+
+\begin{equation}
+W=a(SVL)^b
+\end{equation}
+
+Weight is given by $W$, snout to vent length by $SVL$, and $a$ and $b$ are the parameters that need to be fitted. 
+
+```{r part1}
+library(tidyverse)
+
+lizard <- read_csv("lizard.csv")
+
+#Remove juveniles, na, and observations less than 6
+lizard_clean<-lizard %>% 
+  select(spp,sex,SV_length,weight) %>% 
+  filter(sex!="J") %>% 
+  drop_na() %>% 
+  group_by(spp,sex) %>% 
+  filter(n()>=6)
+
+#get names of species that have both male and female for balanced analsyis
+
+lizard_m<-lizard_clean %>% 
+  filter(sex=="M")
+
+lizard_f<-lizard_clean %>% 
+  filter(sex=="F")
+
+spp_select<-intersect(unique(lizard_m$spp),unique((lizard_f$spp)))
+print(spp_select)
+
+
+# create final combined df for model use in purrr and nls
+lizard_comb<-lizard_clean %>% 
+  filter(spp %in% spp_select)
+```
+
+
+2) Present your fitted model on a plot with female and male lizards separated by color. You should include the nls model in `kable` output of the html. Is this model sufficient? Explain why or why not the model represents the data correctly.
+
+```{r part2}
+#Create length function model
+length_to_weight<-function(a,b,length){
+  out=a*length^b
+  
+  return(out)
+}
+# Add controls
+controls=nls.control(maxiter=100)
+
+#Run nls
+nls_one<-nls(weight~length_to_weight(a,b,SV_length),
+             data=lizard_comb,
+             start=list(a=0.031,b=2.98),
+             control=controls)
+
+#Set up the predictions for graphing
+length_step<- seq(from=min(lizard_comb$SV_length),to=max(lizard_comb$SV_length),length.out=100)
+
+predictions<-length_to_weight(a=coefficients(nls_one)[1],b=coefficients(nls_one)[2],length_step)
+
+#collect the predictions into one df
+dfplot=data.frame(predict=predictions,length=length_step)
+  
+#Make the graph, but make it look pretty than this
+ggplot(data=lizard_comb)+
+  geom_point(aes(x=SV_length,y=weight,color=sex))+
+  geom_line(data=dfplot,aes(x=length,y=predict))+
+  theme_minimal()
+
+
+```
+
+
+3) Group by species and sex then nest the data. Use `map()` variants to parameterize length to weight models for every species separated by each sex. Hint: you may need to adjust the controls of the `nls` function
+
+```{r part3}
+#make nls function for purrr
+
+nls_fcn<-function(lizard_df){
+  
+  guess_model=lm(log(weight)~log(SV_length),data=lizard_df)
+  
+  nls_one<-nls(weight~length_to_weight(a,b,SV_length),
+               data=lizard_df,
+               start=list(a=exp(coefficients(guess_model)[1]),b=coefficients(guess_model)[2]),control = controls)
+  
+  return(nls_one)
+}
+
+nls_lizards_purr<-lizard_comb %>% 
+  group_by(spp,sex) %>% 
+  nest() %>% 
+  arrange(spp) %>% 
+  mutate(nls_model=map(data,~nls_fcn(.x))) %>% 
+  mutate(predictions=map2(nls_model,data,~predict(.x,newdata=.y))) %>%  #Part 4 here
+  mutate(RMSE=map2_dbl(predictions,data,~rmse(.x,.y$weight))) %>% 
+  mutate(coeff=map(nls_model,~coefficients(.x)))   #helps with part 6
+```
+
+
+4) Use the models to predict the data. Calculate the RMSE for each model created in part 3. Make at able showing the RMSE for each model.
+
+5) Create a plot grid showing each species and sexes actual weight and the model prediction.
+
+```{r part5}
+  plts<-nls_lizards_purr %>% 
+  mutate(graph=map2(data,predictions,~ggplot()+
+                geom_point(data = .x,aes(x=.x$SV_length,y=.x$weight))+
+                geom_line(aes(x=.x$SV_length,y=.y))))
+
+library(cowplot)
+  
+  plot_grid(plotlist = plts$graph)
+```
+
+
+6) Calculate the percent difference in the $b$ parameter between male and females. Plot the differences as a graph. Describe the implications of your result.
+
+```{r part6}
+coeff<-nls_lizards_purr %>%
+  select(spp,sex,coeff) %>% 
+  unnest(coeff) %>% 
+  group_by(spp,sex) %>% 
+  arrange(sex) %>% 
+  mutate(female_b=lead(coeff)) %>% 
+  drop_na() %>% 
+  group_by(spp) %>% 
+  mutate(male_a=lead(coeff)) %>% 
+  mutate(male_b=lead(female_b)) %>% 
+  drop_na() %>% 
+  mutate(pctdiff_a=(male_a-coeff)/coeff*100) %>% 
+  mutate(pctdiff_b=(male_b-female_b)/female_b*100)
+
+
+ggplot(data=coeff,aes(x=spp,y=pctdiff_b))+
+  geom_col()+
+  theme_minimal()
+
+ 
+
+  
+```
+

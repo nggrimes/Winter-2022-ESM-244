@@ -93,7 +93,7 @@ ggplot(data=one_stock,aes(x=year,y=surplus))+
 
 ### Create a Fox Model
 
-There are three primary surplus-production models in the fishery world. The most common is the Gordon-Schaefer model. Vert-pre etal., use a Fox-Model that typically provides a more conservative estimate of maximum sustainable yield. The last model is the Pella-Tomslison model that really is just a more flexible model of the other too using a shape parameter $\phi$ to control the curve. All are built on a logistic growth curve. Given a level of biomass we will be able to predict what the surplus ought to be if we know (or will determine) the maximum sustainable yield and the carrying capacity. Maximum sustainable yield simply refers to the amount of biomass that facilitates the greatest level of harvest possible without depleting the stock. Carrying capacity is the upper bound on the total population size and represents natural environmental pressure limiting stock growth. The paper uses a simplified Fox model that we try to find parameters for to fit the fishery data.  
+There are three primary surplus-production models in the fishery world. The most common is the Gordon-Schaefer model. Vert-pre etal., use a Fox-Model that typically provides a more conservative estimate of maximum sustainable yield. The last model is the Pella-Tomslison model that really is just a more flexible model of the other two using a shape parameter $\phi$ to control the curve. All are built on a logistic growth curve. Given a level of biomass we will be able to predict what the surplus ought to be if we know (or will determine) the maximum sustainable yield and the carrying capacity. Maximum sustainable yield simply refers to the amount of biomass that facilitates the greatest level of harvest possible without depleting the stock. Carrying capacity is the upper bound on the total population size and represents natural environmental pressure limiting stock growth. The paper uses a simplified Fox model that we try to find parameters for to fit the fishery data.  
 
 \begin{equation}
 \hat{S_t}=-e*MSY(\frac{B_t}{K})\ln(\frac{B_t}{K})
@@ -110,7 +110,7 @@ return(out)
 }
 ```
 
-Now we can construct our nonlinear least squares with sufficient guesses. But what should our guesses be? Well carrying capacity is straightforward. Traditionally, its estimated as the highest observed biomass so we can just the max of the biomass data. Maximum sustainable yield can be found through analytical analysis. It's been done many times over so I'll just tell you it's estimated at 37% of the carrying capacity.
+Now we can construct our nonlinear least squares with sufficient guesses. But what should our guesses be? Well carrying capacity is straightforward. Traditionally, its estimated as the highest observed biomass so we can just take the max of the biomass data. Maximum sustainable yield can be found through analytical analysis. It's been done many times so I'll just tell you it's estimated at 37% of the carrying capacity.
 
 ```{r nlsonemodel}
 
@@ -127,7 +127,7 @@ Great our model works on a single model! Now we need to find a way to replicate 
 
 ### Using purrr to run many nls models
 
-Purrr is a package in r that has been designed to use the functionality of lapply family of equations for the tidyverse. So now we can use pipes to pass along the application of functions and models to dataframes, specific lists in a dataframe, or specific indicies of a dataframe. There is some new syntax that we will use, but hopefully it will be clear and you'll the power of purrr in future applications.
+Purrr is a package in r that has been designed to use the functionality of lapply family of equations for the tidyverse. So now we can use pipes to pass along the application of functions and models to dataframes, specific lists in a dataframe, or specific indicies of a dataframe. There is some new syntax that we will use, but hopefully it will be clear and you'll see the power of purrr in future applications.
 
 ```{r nlsmany}
 #Define a new function to pass along the nls calls
@@ -152,7 +152,7 @@ fox_all<-surplus %>%
 
 ## Compare to a random null model
 
-In the paper they derive a null model to test the different models against. The best way to test if any of these models are better is if they can out perform just a random collection of data. They propose if we just use the average surplus from the time period and our models can't outpeform that, then the stock is under more influence of sheer randomness then any explicable measures. We can jump straight into the purrr analysis.
+In the paper, they derive a null model to test the different models against. The best way to test if any of these models are better is if they can out perform a random collection of data. They propose if our models can't outpeform the average surplus in the time frame, then the stock is under more influence of sheer randomness then any explicable measures. We can jump straight into the purrr analysis.
 
 ```{r}
 
@@ -179,11 +179,11 @@ which(r_mse$RMSE-fox_all$RMSE<0)
 
 fox_all$stockid[39]
 ```
-In the paper, about 12% of the stocks were more explained by random shocks and 16% more so by abundance models. The rest were lead by regime shifts that we did not model. Our results only found one stock out of 44 was better explained by random growth. Either our choice of nls models is far better than their mle method (not likely), or the subset I choose lends itself more to abundance models (this is really what happened). I did not want to overwhelm the analysis with over 200 stocks. 
+In the paper, about 12% of the stocks were more explained by random shocks and 16% more so by abundance models. The rest were led by regime shifts that we did not model. Our results only found one stock out of 44 was better explained by random growth. Either our choice of nls models is far better than their mle method (not likely), or the subset I chose lends itself more to abundance models (this is really what happened). I did not want to overwhelm the analysis with over 200 stocks. Cod species in their paper typically were best explained by abundance models. Since our dataset focuses on cod, it's unsurprising that the Fox model best predicts cod suprlus.
 
 ## Graph the top 5 best fit models
 
-Purrr combined with cowplot creates a streamlined way to build multiple graphs. Let's take the 5 best fit fox models and show how they performed compared to the data. 
+Purrr combined with cowplot creates a streamlined way to build multiple graphs. Let's take the 5 best fit Fox models and show how they performed compared to the data. 
 
 ```{r}
 plots<-fox_all %>% 
@@ -191,13 +191,19 @@ plots<-fox_all %>%
   head(5) %>% 
   mutate(graph=map2(data,predictions,~ggplot()+geom_point(data = .x,aes(x=.x$year,y=.x$surplus,color='Actual'))+geom_point(aes(x=.x$year,y=.y,color='Predicted'))+theme_minimal()+xlab('Year')+ylab('Surplus')+scale_color_manual(name="Legend",breaks = c('Actual','Predicted'),values=c('Actual'='black','Predicted'='red'))))
 
+#extract the legend
+
 legend<-get_legend(plots$graph[[1]])
 
+#remove the legend from the plots
 for(i in 1:length(plots$graph)){
   plots$graph[[i]]<-plots$graph[[i]]+theme(legend.position = "none")
 }
 
+#Make a new list
 plot_list=plots$graph
+
+#create a new plot in the empty space of cowplot grids and fill it with the legend info we took from the plots.
 
 plot_list[[6]]<-legend
 
