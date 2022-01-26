@@ -77,10 +77,12 @@ length_to_weight<-function(a,b,length){
 # Add controls
 controls=nls.control(maxiter=100)
 
+guess_model=lm(log(weight)~log(SV_length),data=llizard_comb)
+
 #Run nls
 nls_one<-nls(weight~length_to_weight(a,b,SV_length),
              data=lizard_comb,
-             start=list(a=0.031,b=2.98),
+             start=list(a=coefficients(guess_model)[1],b=cofficients(guess_model)[2]),
              control=controls)
 
 #Set up the predictions for graphing
