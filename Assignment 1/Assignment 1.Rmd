@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE,cache=TRUE,warning = FALSE)
+knitr::opts_chunk$set(echo = TRUE,cache=TRUE,warning = FALSE,message=FALSE)
 
 library(tidyverse)
 library(lubridate)
@@ -81,10 +81,10 @@ model2<-lm(o2sat~t_deg_c+salinity+po4u_m+depth_m,data=seawater_raw)
 #Combine into list and provide names to make the combined AIC tab function work smoother
 
 models<-list(model1,model2)
-mod.names<-c("depth","no.depth")
+mod.names<-c("no.depth","depth")
 aictab(cand.set=models,modnames=mod.names)
 ```
-Select the models based on AIC performance. The no depth linear model performed significantly better based on the $\Delta AIC$ greater than 2. 
+Select the models based on AIC performance. The linear model including depth performed significantly better based on the $\Delta AIC$ greater than 2. 
 
 ```{r CV}
 set.seed(123) #Don't want the computer to shift the random breaks everytime we knit
@@ -107,8 +107,12 @@ CVmodel2<-train(o2sat~t_deg_c+salinity+po4u_m+depth_m,data=seawater_raw,method="
 
 results_CV2<-CVmodel2$results$RMSE
 
+print(results_CV1,results_CV2)
+
 # Choose a model in this case model 1 performs slightly better and test on the whole dataset
 
-final_model<-lm(o2sat~t_deg_c+salinity+po4u_m,data=seawater_raw)
+final_model<-lm(o2sat~t_deg_c+salinity+po4u_m+depth_m,data=seawater_raw)
+
+summary(final_model)
 ```
 

@@ -203,15 +203,25 @@ summary {
 <div id="section" class="section level3">
 <h3></h3>
 <ol style="list-style-type: decimal">
-<li>Create a dataframe of only the sex, species, snout to vent length, and weight. Exclude juveniles from the analysis. Remove any species that possess less than 6 observations. Finally, make sure you “balance” the data between male and female observations (e.g. make sure all species that are selected have observations of both male and female). Show the list of the species that will be used in the rest of the task (can just print out, no need for a table)</li>
+<li><p>Create a dataframe of only the sex, species, snout to vent length, and weight. Exclude juveniles from the analysis. Remove any species that possess less than 6 observations. Finally, make sure you “balance” the data between male and female observations (e.g. make sure all species that are selected have observations of both male and female). Show the list of the species that will be used in the rest of the task (can just print out, no need for a table)</p></li>
+<li><p>Fit a snout length to weight model of the following form to all lizard in your clean dataframe.</p></li>
 </ol>
-<p>Fit a snout length to weight model of the following form to all lizard in your clean dataframe.</p>
 <p><span class="math display">\[\begin{equation}
 W=a(SVL)^b
 \end{equation}\]</span></p>
-<p>Weight is given by <span class="math inline">\(W\)</span>, snout to vent length by <span class="math inline">\(SVL\)</span>, and <span class="math inline">\(a\)</span> and <span class="math inline">\(b\)</span> are the parameters that need to be fitted.</p>
+<ol style="list-style-type: lower-alpha">
+<li><p>Weight is given by W, snout to vent length by SVL, and a and b are the parameters that need to be fitted. Which strategy would be best to provide an initial guess? We could go with strategy one and look through the literature, but let’s practice our coding and math skills.</p></li>
+<li><p>Since we know the model is exponential in nature, we could log transform the data. If we do a standard OLS regression on the log transformed data, we can get approximations of the parameters from the regression coefficients <code>my_guess_model &lt;- lm(log_weight ~ log_length, data = my_df)</code></p></li>
+<li><p>Using the coefficients function, we can then supply the nls start list with the regression coefficients. Hint: You will have to mathematically transform the intercept coefficient to get the guess for parameter a.</p></li>
+</ol>
 <ol start="2" style="list-style-type: decimal">
-<li><p>Present your fitted model on a plot with female and male lizards separated by color. You should include the nls model in <code>kable</code> output of the html. Is this model sufficient? Explain why or why not the model represents the data correctly.</p></li>
+<li><p>Present your fitted model on a plot with female and male lizards separated by color. You should include the nls model in <code>kable</code> output of the html.</p></li>
+<li><p>Filter out the dataset for male “CNTI” species. Fit an nls model to this subset. Compare the output from the species specific nls model to the general nls model for all species by graphing the model fits on the “CNTI” male data. Report the RMSE for both models in the figure caption. Also in the figure caption briefly discuss which model should be used and why.</p></li>
+</ol>
+</div>
+<div id="optional" class="section level3">
+<h3>Optional</h3>
+<ol start="3" style="list-style-type: decimal">
 <li><p>Group by species and sex then nest the data. Use <code>map()</code> variants to parameterize length to weight models for every species separated by each sex. Hint: you may need to adjust the controls of the <code>nls</code> function</p></li>
 <li><p>Use the models to predict the data. Calculate the RMSE for each model created in part 3. Make at able showing the RMSE for each model.</p></li>
 <li><p>Create a plot grid showing each species and sexes actual weight and the model prediction.</p></li>

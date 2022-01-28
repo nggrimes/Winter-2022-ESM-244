@@ -26,13 +26,18 @@ Create a knitted.html saved as `a2_task2_lastname_firstname.html` which provides
 
 1) Create a dataframe of only the sex, species, snout to vent length, and weight. Exclude juveniles from the analysis. Remove any species that possess less than 6 observations. Finally, make sure you "balance" the data between male and female observations (e.g. make sure all species that are selected have observations of both male and female). Show the list of the species that will be used in the rest of the task (can just print out, no need for a table)
 
-Fit a snout length to weight model of the following form to all lizard in your clean dataframe.
+1) Fit a snout length to weight model of the following form to all lizard in your clean dataframe.
 
 \begin{equation}
 W=a(SVL)^b
 \end{equation}
 
-Weight is given by $W$, snout to vent length by $SVL$, and $a$ and $b$ are the parameters that need to be fitted. 
+a) Weight is given by W, snout to vent length by SVL, and a and b are the parameters that need to be fitted. Which strategy would be best to provide an initial guess? We could go with strategy one and look through the literature, but let’s practice our coding and math skills.
+
+b) Since we know the model is exponential in nature, we could log transform the data. If we do a standard OLS regression on the log transformed data, we can get approximations of the parameters from the regression coefficients
+`my_guess_model <- lm(log_weight ~ log_length, data = my_df) `
+
+c) Using the coefficients function, we can then supply the nls start list with the regression coefficients. Hint: You will have to mathematically transform the intercept coefficient to get the guess for parameter a. 
 
 ```{r part1}
 library(tidyverse)
@@ -65,7 +70,7 @@ lizard_comb<-lizard_clean %>%
 ```
 
 
-2) Present your fitted model on a plot with female and male lizards separated by color. You should include the nls model in `kable` output of the html. Is this model sufficient? Explain why or why not the model represents the data correctly.
+2) Present your fitted model on a plot with female and male lizards separated by color. You should include the nls model in `kable` output of the html. 
 
 ```{r part2}
 #Create length function model
@@ -77,12 +82,12 @@ length_to_weight<-function(a,b,length){
 # Add controls
 controls=nls.control(maxiter=100)
 
-guess_model=lm(log(weight)~log(SV_length),data=llizard_comb)
+guess_model=lm(log(weight)~log(SV_length),data=lizard_comb)
 
 #Run nls
 nls_one<-nls(weight~length_to_weight(a,b,SV_length),
              data=lizard_comb,
-             start=list(a=coefficients(guess_model)[1],b=cofficients(guess_model)[2]),
+             start=list(a=exp(coefficients(guess_model))[1],b=coefficients(guess_model)[2]),
              control=controls)
 
 #Set up the predictions for graphing
@@ -102,6 +107,49 @@ ggplot(data=lizard_comb)+
 
 ```
 
+3) Filter out the dataset for male “CNTI” species. Fit an nls model to this subset. Compare the output from the species specific nls model to the general nls model for all species by graphing the model fits on the “CNTI” male data. Report the RMSE for both models in the figure caption. Also in the figure caption briefly discuss which model should be used and why.
+
+```{r compare}
+
+best<-lizard_comb %>% 
+  filter(spp=="CNTI"&sex=="M")
+
+guess_model=lm(log(weight)~log(SV_length),data=best)
+
+#Run nls
+nls_best<-nls(weight~length_to_weight(a,b,SV_length),
+             data=best,
+             start=list(a=exp(coefficients(guess_model))[1],b=coefficients(guess_model)[2]),
+             control=controls)
+
+length_step<- seq(from=min(best$SV_length),to=max(best$SV_length),length.out=100)
+
+predictions_comb<-length_to_weight(a=coefficients(nls_one)[1],b=coefficients(nls_one)[2],length_step)
+
+predictions_best<-length_to_weight(a=coefficients(nls_best)[1],b=coefficients(nls_best)[2],length_step)
+
+#collect the predictions into one df
+dfplot=data.frame(predict=predictions_comb,length=length_step,best=predictions_best)
+
+ggplot(data=best)+
+  geom_point(aes(x=SV_length,y=weight),color="black",size=3)+
+  geom_line(data=dfplot,aes(x=length,y=predict),color="red",size=3)+
+  geom_line(data=dfplot,aes(x=length,y=best),color="blue",size=3)+
+  theme_minimal()
+
+
+### find RMSE between the two models
+
+predict_best<-predict(nls_best,newdata = best$SV_length)
+predict_comb<-predict(nls_one,newdata=best$SV_length)
+
+rmse_best<-rmse(best$weight,predict_best)
+rmse_comb<-rmse(best$weight,predict_comb)
+```
+
+
+
+### Optional 
 
 3) Group by species and sex then nest the data. Use `map()` variants to parameterize length to weight models for every species separated by each sex. Hint: you may need to adjust the controls of the `nls` function
 
@@ -172,4 +220,8 @@ ggplot(data=coeff,aes(x=spp,y=pctdiff_b))+
 
   
 ```
+
+
+
+
 
