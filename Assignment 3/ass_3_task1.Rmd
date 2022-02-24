@@ -1,0 +1,40 @@
+---
+title: "Assignment 3 Work up"
+author: "Nathan Grimes"
+date: "2/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(here)
+library(ggfortify)
+
+```
+
+# Get Data
+
+```{r}
+world_env<-read_csv(here("Assignment 3","Data","world_env_vars.csv"))
+```
+```{r}
+clean<-world_env %>% 
+  drop_na() 
+
+pca_data<-clean %>% 
+  select(-Country) %>% 
+  scale() %>% 
+  prcomp()
+
+screeplot(pca_data)
+autoplot(pca_data,
+         data=clean,
+         loadings= TRUE,
+         loadings.label= TRUE)
+```
+```{r}
+usda<-read_csv(here("Assignment 3","Data","usda_nutrients.csv"))
+```
+

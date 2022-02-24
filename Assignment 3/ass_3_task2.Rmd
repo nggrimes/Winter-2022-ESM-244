@@ -1,0 +1,49 @@
+---
+title: "Asignment 3 Task 2"
+author: "Nathan Grimes"
+date: "2/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(naniar)
+```
+
+```{r}
+streams<-read_csv(here("Assignment 3","Data","sbc_lter_registered_stream_chemistry.csv"))
+```
+
+## Data wrangle
+
+```{r}
+
+#streams[streams==-999]<-NA Base r way of doing it
+#replace_with_na_all(condition = ~.x==-999)  can also use this built in function
+try<-streams %>% 
+  mutate_at(vars(nh4_uM:spec_cond_uSpercm),~na_if(.,-999)) %>% 
+  filter(site_code=="BC02")
+
+stream_site<-streams %>% 
+  mutate_at(vars(nh4_uM:spec_cond_uSpercm),~na_if(.,-999)) %>% 
+  group_by(site_code) %>% 
+  summarise_at(vars(nh4_uM:spec_cond_uSpercm),mean,na.rm=TRUE) %>% 
+  drop_na()
+
+stream_clean<-stream_site %>% 
+  select(-site_code) %>% 
+  scale()
+  
+rownames(stream_clean)<-stream_site$site_code
+stream_dist<-dist(stream_clean,method='euclidean')
+
+stream_hc_complete<-hclust(stream_dist,method="complete")
+
+
+
+
+plot(stream_hc_complete,cex=0.6,hang=-1)
+```
+
