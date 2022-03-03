@@ -9,25 +9,157 @@ output:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE,message=FALSE,warning = FALSE,results = FALSE)
+knitr::opts_chunk$set(echo = TRUE,message=FALSE,warning = FALSE)
+
+library(here)
+library(raster)
+library(maptools)
+library(spatstat)
+library(tidyverse)
+library(tmap)
+library(tmaptools)
+library(sf)
+library(lubridate)
+library(tsibble)
+library(feasts)
+library(sp)
 ```
 
-## R Markdown
+## Task 1
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Students need to include an overview section that briefly summarizes the dataset.
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+```{r data}
+spill_raw<-read_csv(here("Assignment 4","data","Oil_Spill_Incident_Tracking_[ds394].csv"))
 
-```{r cars}
-summary(cars)
+fish_raw<-read_csv(here("Assignment 4","data","willamette_fish_passage.csv"))
+
+ca_counties_sf<-read_sf(here("Assignment 4","data","ca_counties","CA_Counties_TIGER2016.shp"))
+
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+Start data wrangling for graphs
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r}
+ca_subset_sf<-ca_counties_sf %>% 
+  janitor::clean_names() %>% 
+  select(county_name=name,land_area=aland)
+
+#Match the CRS 
+ca_crs<-st_crs(ca_subset_sf)
+
+spill_sf<-st_as_sf(spill_raw,coords=c("X","Y"),crs=ca_crs)
+
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r interactive}
+tmap_mode(mode="view")
+
+tm_shape(ca_subset_sf)+
+  tm_fill("land_area",palette="BuGn")+
+  tm_shape(spill_sf)+
+  tm_dots()
+```
+
+```{r choropleth}
+spill_count<-spill_raw %>% 
+  filter(INLANDMARI=="Inland") %>% 
+  group_by(LOCALECOUN) %>% 
+  summarize(oil_count=n()) %>% 
+  rename(county_name=LOCALECOUN)
+
+oil_sf<-left_join(ca_subset_sf,spill_count,by="county_name")
+
+ggplot()+
+  geom_sf(data=oil_sf,aes(fill=oil_count))
+
+library(urbnmapr)
+library(stringr)
+ca_counties<-counties %>% 
+  filter(state_name=="California") %>% 
+  mutate_at("county_name",str_replace," County","") %>% 
+  mutate_at("county_name",str_squish)
+
+
+oil_county<-left_join(ca_counties,spill_count,by="county_name")
+
+ggplot(data=oil_county,mapping=aes(long,lat,group=group,fill=oil_count))+
+  geom_polygon(color="#ffffff",size=0.25)+
+  scale_fill_viridis_c()+
+  coord_map(projection = "albers",lat0=39,lat1=45)
+  
+```
+
+### Optional Work
+
+```{r crs, eval=FALSE}
+
+oil_sp<-as(spill_sf,"Spatial")
+
+oil_ppp<-as.ppp.SpatialPointsDataFrame(oil_sp)
+
+ca_sp<-as(ca_subset_sf,"Spatial")
+ca_win<-as(ca_sp,"owin")
+
+oil_full<-ppp(oil_ppp$x,oil_ppp$y,window=ca_win)
+
+r_vec<-seq(0,11,by=.1)
+gfunction<-envelope(oil_full,fun=Gest,r=r_vec,nsim=100,nrank=2)
+
+gfunction_long<- gfunction %>% as.data.frame() %>% pivot_longer(cols=obs:hi,names_to = "model",values_to = "g_val")
+
+ggplot(data=gfunction_long,aes(x=r,y=g_val,group=model))+geom_line(aes(color=model))
+
+```
+
+
+## Task 2 Fish migration {.tabset}
+
+### OG Time Series
+
+```{r}
+fish<-fish_raw %>% 
+  janitor::clean_names() %>% 
+  mutate(date=lubridate::mdy(date)) %>% 
+  as_tsibble(key=NULL,index=date) %>% 
+  pivot_longer(!c(project,date),names_to = "species",values_to = "fish_ob") %>% 
+  filter(species %in% c("coho","jack_coho","steelhead")) %>% 
+  replace_na(list(fish_ob=0))
+  
+
+ggplot(data=fish,aes(x=date,y=fish_ob))+
+  geom_line(aes(color=species))+
+  scale_color_manual(values=c("blue","red","green"))
+```
+
+### Season plots
+
+```{r}
+fish_season<-fish %>% 
+  index_by(yr_mo=~yearmonth(.)) %>% 
+  group_by(species) %>% 
+  summarize(monthly_count=sum(fish_ob))
+
+
+fish_season %>% 
+  ggplot(aes(x=year(yr_mo),y=monthly_count))+
+  geom_line(aes(color=species))+
+  facet_wrap(~month(yr_mo))
+
+fish_season %>% gg_season(y=monthly_count)
+```
+
+### Annual counts
+
+```{r}
+fish_count<-fish %>% 
+  index_by(date) %>% 
+  group_by(species) %>%
+  summarize(count=sum(fish_ob))
+
+ggplot(data=fish_count)+
+  geom_line(aes(x=date,y=count,color=species))
+```
+
