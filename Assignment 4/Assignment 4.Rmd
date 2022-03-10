@@ -143,7 +143,7 @@ fish_season<-fish %>%
   summarize(monthly_count=sum(fish_ob))
 
 
-fish_season %>% 
+#fish_season %>% 
   ggplot(aes(x=year(yr_mo),y=monthly_count))+
   geom_line(aes(color=species))+
   facet_wrap(~month(yr_mo))
@@ -155,11 +155,11 @@ fish_season %>% gg_season(y=monthly_count)
 
 ```{r}
 fish_count<-fish %>% 
-  index_by(date) %>% 
-  group_by(species) %>%
-  summarize(count=sum(fish_ob))
+  index_by(yr=~year(.)) %>% 
+  group_by(species) %>% 
+  summarize(annual_count=sum(fish_ob))
 
 ggplot(data=fish_count)+
-  geom_line(aes(x=date,y=count,color=species))
+  geom_line(aes(x=yr,y=annual_count,color=species))
 ```
 
