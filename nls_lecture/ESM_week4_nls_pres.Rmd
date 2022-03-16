@@ -472,7 +472,7 @@ conf<-as_tibble(predFit(b_gompertz,
             newdata = list(animal_age=age_series),
             interval="confidence"),
             level=0.95) 
-
+conf$age=bison_f_predicted$age_series
 head(conf,n=4)
 
 #plot+geom_ribbon(data=conf...)
@@ -490,7 +490,7 @@ ggplot() +
             aes(x = age_series, y = pred),
             color = "blue",
             size = 1) +
-  geom_ribbon(data=conf,aes(x=age,ymin=lwr,ymax=upr),alpha=0.5,fill="blue")+
+  geom_ribbon(data=conf,aes(x=age_series,ymin=lwr,ymax=upr),alpha=0.5,fill="blue")+
   theme_minimal()+
     xlab('Age')+
   ylab('Weight')+
