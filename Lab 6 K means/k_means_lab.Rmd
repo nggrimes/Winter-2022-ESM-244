@@ -1,0 +1,148 @@
+---
+title: "Lab 6 K means clustering"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(janitor)
+library(palmerpenguins)
+
+library(NbClust)
+library(cluster)
+library(factoextra)
+library(dendextend)
+library(ggdendro)
+
+```
+```{r}
+ggplot(penguins)+
+  geom_point(aes(x=bill_length_mm,y=bill_depth_mm,color=species,shape=sex),size=3,alpha=0.7)+
+  scale_color_manual(values=c("orange","cyan4","darkmagenta"))
+```
+
+
+
+```{r}
+penguins_complete<-penguins %>% 
+  drop_na(bill_length_mm,bill_depth_mm,body_mass_g,flipper_length_mm)
+
+
+penguins_scale<-penguins_complete %>% 
+  select(ends_with('mm'),body_mass_g) %>% 
+  scale()
+
+summary(penguins_complete)
+summary(penguins_scale)
+```
+
+```{r}
+number_est<-NbClust(penguins_scale,min.nc=2,max.nc=10,method="kmeans")
+
+
+fviz_nbclust(penguins_scale,FUNcluster = kmeans,method='wss',k.max=10)
+```
+
+## run k means
+
+```{r}
+penguins_km<-kmeans(penguins_scale,3,nstart=25)
+
+penguins_km$size
+penguins_km$cluster
+
+penguins_cl<-data.frame(penguins_complete,cluster_no=factor(penguins_km$cluster))
+```
+
+
+
+```{r}
+ggplot(penguins_cl)+
+  geom_point(aes(x=flipper_length_mm, y=body_mass_g,color=cluster_no,shape=species))
+
+ggplot(penguins_cl)+
+  geom_point(aes(x=bill_length_mm, y=body_mass_g,color=cluster_no,shape=species))
+```
+
+
+
+```{r}
+penguins_cl %>% select(species,cluster_no) %>% table()
+
+```
+
+### Cluster analysis hierachical
+
+```{r}
+
+peng_dist<-dist(penguins_scale,method='euclidean')
+
+peng_hc_complete<-hclust(peng_dist,method="complete")
+
+
+plot(peng_hc_complete,cex=0.6,hang=-1)
+```
+
+```{r}
+peng_cut_hc<-cutree(peng_hc_complete,3)
+table(peng_cut_hc,penguins_complete$species)
+
+
+
+```
+```{r}
+wb_env <- read_csv("Lab 6 K means/wb_env.csv")
+
+wb_ghg_20<-wb_env %>% 
+  arrange(-ghg) %>% 
+  head(20)
+
+summary(wb_ghg_20)
+```
+
+
+
+```{r}
+wb_scaled<-wb_ghg_20 %>% 
+  select(3:7) %>% 
+  scale()
+
+summary(wb_scaled)
+
+rownames(wb_scaled)<-wb_ghg_20$name
+```
+
+```{r}
+euc_distance<-dist(wb_scaled,method="euclidean")
+
+hc_complete<-hclust(euc_distance,method="complete")
+
+plot(hc_complete,cex=0.6,hang=-1)
+
+
+```
+
+```{r}
+hc_single<-hclust(euc_distance,method="single")
+
+plot(hc_single,cex=0.6,hang=-1)
+
+
+```
+
+```{r}
+dend_complete<-as.dendrogram(hc_complete)
+
+dend_simple<-as.dendrogram(hc_single)
+```
+
+
+```{r}
+tanglegram(dend_complete,dend_simple)
+```
+```{r}
+ggdendrogram(hc_complete,rotate=TRUE)+theme_minimal()+labs(x="Country")
+```
+

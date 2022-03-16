@@ -1,0 +1,93 @@
+---
+title: "Asignment 3 Task 2"
+author: "Nathan Grimes"
+date: "2/15/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(naniar)
+library(here)
+```
+
+```{r}
+streams<-read_csv(here("Assignment 3","Data","sbc_lter_registered_stream_chemistry.csv"))
+```
+
+## Data wrangle
+
+```{r}
+
+q_names<-c("q3,q5,q7,q9")
+#streams[streams==-999]<-NA Base r way of doing it
+#replace_with_na_all(condition = ~.x==-999)  can also use this built in function
+
+
+stream_site_na<-streams %>% 
+  mutate_at(vars(nh4_uM:spec_cond_uSpercm),~na_if(.,-999)) %>% 
+  group_by(site_code) %>% 
+  summarise_at(vars(nh4_uM:spec_cond_uSpercm),mean,na.rm=TRUE) %>% 
+  recode(site_code,)
+
+head(stream_site_na,4)
+
+stream_site<-streams %>% 
+  mutate_at(vars(nh4_uM:spec_cond_uSpercm),~na_if(.,-999)) %>% 
+  group_by(site_code) %>% 
+  summarise_at(vars(nh4_uM:spec_cond_uSpercm),mean,na.rm=TRUE) %>% 
+  drop_na()
+
+
+stream_clean<-stream_site %>% 
+  select(-site_code) %>% 
+  scale()
+  
+rownames(stream_clean)<-stream_site$site_code
+stream_dist<-dist(stream_clean,method='euclidean')
+
+stream_hc_complete<-hclust(stream_dist,method="complete")
+
+
+
+plot(stream_hc_complete,cex=0.6,hang=-1)
+```
+```{r}
+stream_clean<-stream_site_na %>% 
+  select(-site_code) %>% 
+  scale()
+  
+rownames(stream_clean)<-stream_site_na$site_code
+stream_dist<-dist(stream_clean,method='euclidean')
+
+stream_hc_complete<-hclust(stream_dist,method="complete")
+
+
+
+plot(stream_hc_complete,cex=0.6,hang=-1)
+```
+
+```{r}
+
+
+
+
+
+df_na<-tibble::tribble(
+     ~site_code,          ~nh4_uM,          ~no3_uM,          ~po4_uM,          ~tdn_uM,          ~tdp_uM,          ~tpc_uM,          ~tpn_uM,          ~tpp_uM,  ~tss_mgperLiter, ~spec_cond_uSpercm,
+         "AB00", 3.02368421052632, 53.9672733891518, 4.68285922684172, 110.396822832526, 6.30572979493366, 1444.70224719101, 142.847471910112, 101.015302491103, 921.928169014084,   1004.48859683031,
+         "AT07", 2.36942934782609, 72.5757123473541, 8.96146540027137, 115.794277929155, 8.40354223433243,             65.2, 8.26666666666667, 1.36666666666667, 219.666666666667,   1094.41287284144,
+         "BC02", 2.35228390723823, 451.465067043049, 5.21117357695011, 632.634926052332,   4.674317617866,              NaN,              NaN,              NaN, 7452.89139194139,    1643.1733615222,
+         "DV01", 18.0422222222222, 84.0693333333333, 10.1428888888889, 173.282039911308, 11.0130820399113,              NaN,              NaN,              NaN, 58.4116049382716,    2510.2606741573
+     )
+
+df<-tibble::tribble(
+     ~site_code,          ~nh4_uM,          ~no3_uM,           ~po4_uM,          ~tdn_uM,          ~tdp_uM,          ~tpc_uM,          ~tpn_uM,          ~tpp_uM,  ~tss_mgperLiter, ~spec_cond_uSpercm,
+         "AB00", 3.02368421052632, 53.9672733891518,  4.68285922684172, 110.396822832526, 6.30572979493366, 1444.70224719101, 142.847471910112, 101.015302491103, 921.928169014084,   1004.48859683031,
+         "AT07", 2.36942934782609, 72.5757123473541,  8.96146540027137, 115.794277929155, 8.40354223433243,             65.2, 8.26666666666667, 1.36666666666667, 219.666666666667,   1094.41287284144,
+         "GV01", 3.94982403217697, 23.9582456140351,  4.00511791269443, 61.7159753363229, 4.45271676300578,   11103.41522694, 839.321376281113, 483.685486725664, 5058.55716112532,   1255.54977029096,
+         "HO00", 0.14315424610052, 44.1677308024159, 0.348051948051948, 32.8790927021696, 1.86057268722467, 18.3171428571429, 1.55714285714286,           0.0125, 532.933467741935,   858.675723049956
+     )
+```
