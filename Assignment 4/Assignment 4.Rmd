@@ -75,7 +75,7 @@ oil_sf<-left_join(ca_subset_sf,spill_count,by="county_name")
 ggplot()+
   geom_sf(data=oil_sf,aes(fill=oil_count))
 
-library(urbnmapr)
+#library(urbnmapr)
 library(stringr)
 ca_counties<-counties %>% 
   filter(state_name=="California") %>% 
@@ -83,7 +83,7 @@ ca_counties<-counties %>%
   mutate_at("county_name",str_squish)
 
 
-oil_county<-left_join(ca_counties,spill_count,by="county_name")
+oil_county<-left_join(ca_counties_sf,spill_count,by="county_name")
 
 ggplot(data=oil_county,mapping=aes(long,lat,group=group,fill=oil_count))+
   geom_polygon(color="#ffffff",size=0.25)+
